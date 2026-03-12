@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Benchmark Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap: 16px; }
+    .toolbar { display: flex; gap: 10px; margin: 8px 0 16px 0; flex-wrap: wrap; }
+    .panel { border: 1px solid #ddd; padding: 10px; border-radius: 8px; margin: 12px 0; }
+    input, select, button { padding: 6px; }
+    canvas { background: #fafafa; border: 1px solid #ddd; padding: 8px; }
+    #execResult { white-space: pre-wrap; background: #f7f7f7; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Benchmark Dashboard</h1>
+
+  <div class="panel">
+    <h3>API 실행 (실행파일 + 파라미터)</h3>
+    <div class="toolbar">
+      <input id="processName" placeholder="process_name" value="demo_pipeline" />
+      <input id="executable" placeholder="executable" value="python" />
+      <input id="args" placeholder='args (예: scripts/sample_workload.py --sleep 2)' value="scripts/sample_workload.py --sleep 2" style="min-width:320px;" />
+      <select id="interval"><option>0.5</option><option selected>1.0</option><option>2.0</option><option>5.0</option></select>
+      <button id="runExec">실행</button>
+    </div>
+    <div id="execResult">아직 실행 기록 없음</div>
+  </div>
+
+  <label>Run:
+    <select id="runSelect"></select>
+  </label>
+  <div class="toolbar">
+    <button id="downloadJson">JSON 다운로드</button>
+    <button id="downloadCsv">CSV 다운로드</button>
+    <button id="downloadMd">Markdown 다운로드</button>
+  </div>
+
+  <pre id="summary"></pre>
+  <div class="grid">
+    <canvas id="cpu"></canvas>
+    <canvas id="ram"></canvas>
+    <canvas id="disk"></canvas>
+    <canvas id="gpu"></canvas>
+    <canvas id="vram"></canvas>
+    <canvas id="network"></canvas>
+  </div>
+
+  <script>
+    const charts = {};
+
+    function selectedMeasurementId() {
+      return document.getElementById('runSelect').value;
+    }
+
+    function triggerDownload(path, filename) {
+      const a = document.createElement('a');
+      a.href = path;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+
+    async function loadRuns(selectId = null) {
+      const runs = await fetch('/api/runs').then(r => r.json());
+      const sel = document.getElementById('runSelect');
+      sel.innerHTML = '';
+      runs.forEach(run => {
+        const opt = document.createElement('option');
+        opt.value = run.measurement_id;
+        opt.textContent = `${run.measurement_id} (${run.process_name})`;
+        sel.appendChild(opt);
+      });
+      if (!runs.length) {
+        document.getElementById('summary').textContent = 'run 데이터가 없습니다.';
+        return;
+      }
+      if (selectId) sel.value = selectId;
+      await loadRun(sel.value || runs[0].measurement_id);
+    }
+
+    function draw(id, label, labels, datasets) {
+      if (charts[id]) charts[id].destroy();
+      charts[id] = new Chart(document.getElementById(id), {
+        type: 'line',
+        data: { labels, datasets },
+        options: { responsive: true, plugins: { title: { display: true, text: label } } }
+      });
+    }
+
+    async function loadRun(measurementId) {
+      const report = await fetch(`/api/runs/${measurementId}`).then(r => r.json());
+      const series = report.series;
+      const labels = series.map(s => new Date(s.timestamp).toLocaleTimeString());
+
+      draw('cpu', 'CPU Usage %', labels, [{ label: 'CPU', data: series.map(s => s.cpu), borderColor: '#ff6384' }]);
+      draw('ram', 'RAM Used', labels, [{ label: 'RAM', data: series.map(s => s.ram), borderColor: '#36a2eb' }]);
+      draw('disk', 'Disk Throughput', labels, [
+        { label: 'Read', data: series.map(s => s.disk_read), borderColor: '#4bc0c0' },
+        { label: 'Write', data: series.map(s => s.disk_write), borderColor: '#9966ff' }
+      ]);
+      draw('gpu', 'GPU Utilization', labels, [{ label: 'GPU', data: series.map(s => s.gpu_utilization), borderColor: '#ff9f40' }]);
+      draw('vram', 'GPU VRAM %', labels, [{ label: 'VRAM', data: series.map(s => s.gpu_vram_percent), borderColor: '#8bc34a' }]);
+      draw('network', 'Network Throughput', labels, [
+        { label: 'RX', data: series.map(s => s.network_rx), borderColor: '#607d8b' },
+        { label: 'TX', data: series.map(s => s.network_tx), borderColor: '#e91e63' }
+      ]);
+
+      document.getElementById('summary').textContent = JSON.stringify({
+        measurement_id: report.measurement_id,
+        process_name: report.process_name,
+        run_summary: report.run_summary,
+        step_summaries: report.step_summaries
+      }, null, 2);
+    }
+
+    async function executeCommand() {
+      const body = {
+        process_name: document.getElementById('processName').value,
+        executable: document.getElementById('executable').value,
+        args: document.getElementById('args').value.trim().split(/\s+/).filter(Boolean),
+        interval: parseFloat(document.getElementById('interval').value),
+        function_name: 'external_command'
+      };
+      const result = await fetch('/api/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      }).then(r => r.json());
+
+      document.getElementById('execResult').textContent = JSON.stringify(result, null, 2);
+      if (result.measurement_id) await loadRuns(result.measurement_id);
+    }
+
+    document.getElementById('runSelect').addEventListener('change', (e) => loadRun(e.target.value));
+    document.getElementById('runExec').addEventListener('click', executeCommand);
+
+    document.getElementById('downloadJson').addEventListener('click', () => {
+      const id = selectedMeasurementId();
+      if (id) triggerDownload(`/api/runs/${id}/export/json`, `benchmark_${id}.json`);
+    });
+    document.getElementById('downloadCsv').addEventListener('click', () => {
+      const id = selectedMeasurementId();
+      if (id) triggerDownload(`/api/runs/${id}/export/csv`, `benchmark_${id}.csv`);
+    });
+    document.getElementById('downloadMd').addEventListener('click', () => {
+      const id = selectedMeasurementId();
+      if (id) triggerDownload(`/api/runs/${id}/export/md`, `benchmark_${id}.md`);
+    });
+
+    loadRuns();
+  </script>
+</body>
+</html>
