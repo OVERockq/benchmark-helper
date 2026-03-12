@@ -40,8 +40,21 @@ class StepTracker:
         return ctx
 
     def end_run(self, measurement_id: str) -> None:
+        # 모든 단계 종료 및 수집기 정리
         for step in self.db.list_steps(measurement_id):
             self.step_end(measurement_id, step.function_name)
+        
+        # detached 프로세스가 남아있는 경우 명시적으로 정리
+        steps = self.db.list_steps(measurement_id)
+        for step in steps:
+            pid = self.db.get_collector_pid(measurement_id, step.function_name)
+            if pid:
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                self.db.clear_collector(measurement_id, step.function_name)
+        
         self.db.end_run(measurement_id)
         if self.current_run and self.current_run.measurement_id == measurement_id:
             self.current_run = None

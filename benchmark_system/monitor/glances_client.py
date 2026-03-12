@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
@@ -37,14 +38,14 @@ class GlancesClient:
         try:
             cpu = self._get("cpu")
             metrics["cpu"] = float(cpu.get("total", 0.0))
-        except Exception:
+        except (URLError, ValueError, KeyError, TypeError):
             pass
 
         try:
             mem = self._get("mem")
             metrics["ram"] = float(mem.get("used", 0.0))
             metrics["ram_percent"] = float(mem.get("percent", 0.0))
-        except Exception:
+        except (URLError, ValueError, KeyError, TypeError):
             pass
 
         try:
@@ -54,7 +55,7 @@ class GlancesClient:
                 metrics["disk_write"] = float(sum(d.get("write_bytes", 0.0) for d in disks))
                 utils = [d.get("time_since_update") for d in disks if isinstance(d.get("time_since_update"), (int, float))]
                 metrics["io_utilization"] = float(sum(utils) / len(utils)) if utils else None
-        except Exception:
+        except (URLError, ValueError, KeyError, TypeError, ZeroDivisionError):
             pass
 
         try:
@@ -62,7 +63,7 @@ class GlancesClient:
             if isinstance(net, list) and net:
                 metrics["network_rx"] = float(sum(n.get("rx", 0.0) for n in net))
                 metrics["network_tx"] = float(sum(n.get("tx", 0.0) for n in net))
-        except Exception:
+        except (URLError, ValueError, KeyError, TypeError):
             pass
 
         try:
@@ -76,7 +77,7 @@ class GlancesClient:
                     metrics["gpu_vram_percent"] = 100.0 * metrics["gpu_vram_used"] / metrics["gpu_vram_total"]
                 metrics["gpu_temperature"] = float(card.get("temperature", 0.0)) if card.get("temperature") is not None else None
                 metrics["gpu_power"] = float(card.get("power", 0.0)) if card.get("power") is not None else None
-        except Exception:
+        except (URLError, ValueError, KeyError, TypeError, ZeroDivisionError, IndexError):
             pass
 
         return metrics

@@ -78,23 +78,26 @@ def run_report(measurement_id: str) -> dict:
 
 @app.get("/api/runs/{measurement_id}/export/{fmt}")
 def export_run(measurement_id: str, fmt: str):
-    filename = f"benchmark_{measurement_id}.{fmt if fmt != 'markdown' else 'md'}"
-    if fmt == "json":
-        body = agg.build_run_report(measurement_id)
-        return JSONResponse(body, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
-    if fmt == "csv":
-        return PlainTextResponse(
-            agg.export_csv(measurement_id),
-            media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-    if fmt in {"md", "markdown"}:
-        return PlainTextResponse(
-            agg.export_markdown(measurement_id),
-            media_type="text/markdown",
-            headers={"Content-Disposition": f'attachment; filename="benchmark_{measurement_id}.md"'},
-        )
-    raise HTTPException(status_code=400, detail="format must be json|csv|md")
+    try:
+        filename = f"benchmark_{measurement_id}.{fmt if fmt != 'markdown' else 'md'}"
+        if fmt == "json":
+            body = agg.build_run_report(measurement_id)
+            return JSONResponse(body, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+        if fmt == "csv":
+            return PlainTextResponse(
+                agg.export_csv(measurement_id),
+                media_type="text/csv",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        if fmt in {"md", "markdown"}:
+            return PlainTextResponse(
+                agg.export_markdown(measurement_id),
+                media_type="text/markdown",
+                headers={"Content-Disposition": f'attachment; filename="benchmark_{measurement_id}.md"'},
+            )
+        raise HTTPException(status_code=400, detail="format must be json|csv|md")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/execute")
@@ -107,6 +110,9 @@ def execute_benchmark(payload: ExecuteRequest) -> dict:
     tracker.step_start(run.measurement_id, payload.function_name, payload.reference, detached=True)
 
     started = datetime.utcnow()
+    return_code = -1
+    stdout = ""
+    stderr = ""
     try:
         completed = subprocess.run(
             command,
@@ -117,12 +123,15 @@ def execute_benchmark(payload: ExecuteRequest) -> dict:
             check=False,
         )
         return_code = completed.returncode
-        stdout = completed.stdout
-        stderr = completed.stderr
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
     except subprocess.TimeoutExpired as exc:
         return_code = -1
         stdout = exc.stdout.decode("utf-8") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
         stderr = exc.stderr.decode("utf-8") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        return_code = -1
+        stderr = str(exc)
     finally:
         tracker.step_end(run.measurement_id, payload.function_name)
         tracker.end_run(run.measurement_id)
@@ -142,7 +151,8 @@ def execute_benchmark(payload: ExecuteRequest) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard() -> str:
-    with open("benchmark_system/web/dashboard.html", "r", encoding="utf-8") as f:
+    dashboard_path = Path(__file__).parent / "dashboard.html"
+    with open(dashboard_path, "r", encoding="utf-8") as f:
         return f.read()
 
 
