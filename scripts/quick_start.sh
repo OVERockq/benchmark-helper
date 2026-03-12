@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 스크립트가 있는 디렉토리에서 프로젝트 루트로 이동
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# PYTHONPATH에 프로젝트 루트 추가
+export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+
 if [ -f .env ]; then
   set -a
   # shellcheck disable=SC1091
