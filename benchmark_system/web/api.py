@@ -24,6 +24,19 @@ agg = MetricsAggregator(db)
 tracker = StepTracker(db, GlancesClient(settings.glances_url), settings.database_url, settings.glances_url)
 
 
+@app.on_event("startup")
+def check_glances_on_startup() -> None:
+    """애플리케이션 시작 시 Glances 연결을 확인합니다."""
+    glances_client = GlancesClient(settings.glances_url)
+    if not glances_client.check_connection():
+        import warnings
+        warnings.warn(
+            f"경고: Glances 서버에 연결할 수 없습니다 ({settings.glances_url}). "
+            "벤치마크 실행 시 메트릭 수집이 실패할 수 있습니다. "
+            "Glances가 설치되어 있고 실행 중인지 확인하세요: glances -w"
+        )
+
+
 class ExecuteRequest(BaseModel):
     process_name: str = Field(..., description="Logical process name for benchmark run")
     executable: str = Field(..., description="Executable path or command")

@@ -1,0 +1,12 @@
+# Benchmark Helper 의존성 패키지
+
+# 웹 프레임워크 및 API
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# 데이터 검증
+pydantic>=2.0.0
+
+# 참고: Glances는 별도로 설치해야 합니다
+# Ubuntu/Debian: sudo apt-get install glances
+# 또는: pip install glances

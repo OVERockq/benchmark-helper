@@ -13,6 +13,22 @@ Ubuntu Linux 환경에서 Glances REST API를 통해 단계별 리소스 사용�
 - 웹 대시보드: FastAPI + Chart.js 시각화 및 다운로드 버튼
 - 실행 API: 웹 API로 실행파일/파라미터를 받아 벤치마크 실행
 
+## 설치
+
+**Python 패키지 설치:**
+```bash
+pip install -r requirements.txt
+```
+
+**Glances 설치 (별도 필요):**
+```bash
+# Ubuntu/Debian
+sudo apt-get install glances
+
+# 또는 pip로
+pip install glances
+```
+
 ## 환경 변수
 
 `.env.example`를 복사해 `.env`로 사용하세요.
@@ -27,11 +43,39 @@ cp .env.example .env
 - `BENCHMARK_GLANCES_URL` (기본: `http://localhost:61208/api/3`)
 - `BENCHMARK_DEFAULT_INTERVAL` (기본: `1.0`)
 
-## Glances 실행
+## 사전 요구사항
 
+### Glances 설치 및 실행
+
+Glances는 시스템 리소스 모니터링 도구입니다. 벤치마크 실행 전에 설치하고 실행해야 합니다.
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install glances
+```
+
+**또는 pip로 설치:**
+```bash
+pip install glances
+```
+
+**Glances 웹 서버 실행:**
 ```bash
 glances -w
 ```
+
+기본적으로 `http://localhost:61208`에서 실행됩니다. 다른 포트를 사용하려면:
+```bash
+glances -w --port 61208
+```
+
+**연결 확인:**
+```bash
+curl http://localhost:61208/api/3/cpu
+```
+
+정상적으로 연결되면 JSON 응답이 반환됩니다.
 
 ## 빠른 실행 스크립트
 

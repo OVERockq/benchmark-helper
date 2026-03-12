@@ -2,12 +2,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from benchmark_system.analytics.metrics_aggregator import MetricsAggregator
 from benchmark_system.config.settings import get_settings, load_dotenv
 from benchmark_system.monitor.glances_client import GlancesClient
 from benchmark_system.runner.step_tracker import StepTracker
 from benchmark_system.storage.database import Database, DatabaseConfig
+
+
+def check_glances_connection(glances_url: str) -> None:
+    """Glances 서버 연결을 확인하고 실패 시 오류 메시지를 출력합니다."""
+    client = GlancesClient(base_url=glances_url)
+    if not client.check_connection():
+        print(
+            f"오류: Glances 서버에 연결할 수 없습니다 ({glances_url})\n"
+            "Glances가 설치되어 있고 실행 중인지 확인하세요:\n"
+            "  1. 설치: pip install glances 또는 apt-get install glances\n"
+            "  2. 실행: glances -w (웹 서버 모드)\n"
+            "  3. URL 확인: 환경 변수 BENCHMARK_GLANCES_URL 설정",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def build_tracker(database_url: str, glances_url: str) -> StepTracker:
@@ -53,6 +69,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     load_dotenv(args.env_file)
+    
+    # glances 연결이 필요한 명령어인 경우 체크
+    if args.command in ("start", "step-start"):
+        check_glances_connection(args.glances_url)
+    
     tracker = build_tracker(args.database_url, args.glances_url)
 
     if args.command == "start":

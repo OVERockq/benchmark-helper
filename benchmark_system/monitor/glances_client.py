@@ -17,6 +17,14 @@ class GlancesClient:
         with urlopen(req, timeout=self.timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
+    def check_connection(self) -> bool:
+        """Glances 서버 연결 가능 여부를 확인합니다."""
+        try:
+            self._get("cpu")
+            return True
+        except (URLError, ValueError, KeyError, TypeError):
+            return False
+
     def sample(self) -> dict[str, float | None]:
         metrics: dict[str, float | None] = {
             "cpu": None,
